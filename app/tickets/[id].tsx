@@ -5,6 +5,7 @@ import { TicketPreview } from '@/components/ui/TicketPreview';
 import { Colors } from '@/constants/theme';
 import { formatCurrency, formatDateTime, formatDuration } from '@/services/pricing';
 import { printTicket } from '@/services/print';
+import { useDeviceStore } from '@/store/deviceSlice';
 import { useRatesStore } from '@/store/ratesSlice';
 import { useTicketsStore } from '@/store/ticketsSlice';
 import { useVehicleTypesStore } from '@/store/vehicleTypesSlice';
@@ -18,6 +19,7 @@ export default function TicketDetailScreen() {
   const { getTicketById, getPaymentsForTicket } = useTicketsStore();
   const { vehicleTypes } = useVehicleTypesStore();
   const { ratePlans } = useRatesStore();
+  const { device } = useDeviceStore();
   
   const [ticket, setTicket] = useState<any>(null);
   const [payments, setPayments] = useState<any[]>([]);
@@ -52,8 +54,13 @@ export default function TicketDetailScreen() {
   const ratePlan = ratePlans.find(rp => rp.id === ticket.rate_plan_id);
 
   const handlePrintTicket = async () => {
+    if (!device) {
+      Alert.alert('Error', 'Información del dispositivo no disponible');
+      return;
+    }
+
     try {
-      await printTicket(ticket, vehicleType!, ratePlan!);
+      await printTicket(ticket, vehicleType!, ratePlan!, device, ticket.status === 'closed');
       Alert.alert('Éxito', 'Ticket enviado a la impresora');
     } catch (error) {
       Alert.alert(
