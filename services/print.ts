@@ -25,62 +25,48 @@ const base64Encode = (str: string): string => {
   return result;
 };
 
-// Generate QR code as SVG data URL
+// Generate real QR code using qrcode-generator library
 const generateQRCode = (text: string): string => {
   try {
-    // Create a simple but functional QR-like pattern
+    console.log('Generating real QR code for:', text);
+    
+    // Import the QR code generator dynamically
+    const QRCode = require('qrcode-generator');
+    
+    // Create QR code instance
+    const qr = QRCode(0, 'M'); // Error correction level M
+    qr.addData(text);
+    qr.make();
+    
+    // Get the module count
+    const moduleCount = qr.getModuleCount();
     const size = 200;
-    const modules = 25; // 25x25 grid
-    const moduleSize = size / modules;
+    const moduleSize = size / moduleCount;
     
-    // Generate a deterministic pattern based on the text
-    let pattern = '';
-    for (let i = 0; i < modules; i++) {
-      for (let j = 0; j < modules; j++) {
-        const charCode = text.charCodeAt((i * modules + j) % text.length);
-        const isBlack = (charCode + i + j) % 2 === 0;
-        pattern += isBlack ? '1' : '0';
+    console.log('QR module count:', moduleCount);
+    
+    // Create HTML table with real QR pattern
+    let html = `<table style="border-collapse: collapse; margin: 0 auto; width: ${size}px; height: ${size}px; background: white; border: 1px solid black;">`;
+    
+    for (let row = 0; row < moduleCount; row++) {
+      html += '<tr>';
+      for (let col = 0; col < moduleCount; col++) {
+        const isDark = qr.isDark(row, col);
+        const cellStyle = `width: ${Math.floor(moduleSize)}px; height: ${Math.floor(moduleSize)}px; background-color: ${isDark ? 'black' : 'white'}; border: none; padding: 0; margin: 0; min-width: ${Math.floor(moduleSize)}px; min-height: ${Math.floor(moduleSize)}px;`;
+        html += `<td style="${cellStyle}"></td>`;
       }
+      html += '</tr>';
     }
     
-    // Create SVG
-    let svg = `<svg width="${size}" height="${size}" xmlns="http://www.w3.org/2000/svg">`;
-    svg += `<rect width="${size}" height="${size}" fill="white"/>`;
+    html += '</table>';
     
-    // Add corner markers (like real QR codes)
-    const cornerSize = 7;
-    for (let i = 0; i < cornerSize; i++) {
-      for (let j = 0; j < cornerSize; j++) {
-        if ((i < 2 || i > 4) && (j < 2 || j > 4)) {
-          svg += `<rect x="${i * moduleSize}" y="${j * moduleSize}" width="${moduleSize}" height="${moduleSize}" fill="black"/>`;
-        }
-      }
-    }
+    console.log('Real QR HTML generated, length:', html.length);
     
-    // Add pattern
-    for (let i = 0; i < modules; i++) {
-      for (let j = 0; j < modules; j++) {
-        if (pattern[i * modules + j] === '1') {
-          // Skip corner areas
-          if (!((i < cornerSize && j < cornerSize) || 
-                (i < cornerSize && j >= modules - cornerSize) || 
-                (i >= modules - cornerSize && j < cornerSize))) {
-            svg += `<rect x="${i * moduleSize}" y="${j * moduleSize}" width="${moduleSize}" height="${moduleSize}" fill="black"/>`;
-          }
-        }
-      }
-    }
-    
-    svg += '</svg>';
-    
-    // Convert to data URL
-    const dataURL = `data:image/svg+xml;base64,${base64Encode(svg)}`;
-    return dataURL;
+    return html;
   } catch (error) {
-    console.error('Error generating QR code:', error);
+    console.error('Error generating real QR code:', error);
     // Fallback to simple text
-    const fallbackSvg = `<svg width="200" height="200" xmlns="http://www.w3.org/2000/svg"><rect width="200" height="200" fill="white"/><text x="100" y="100" text-anchor="middle" font-family="monospace" font-size="12">QR: ${text}</text></svg>`;
-    return `data:image/svg+xml;base64,${base64Encode(fallbackSvg)}`;
+    return `<div style="width: 200px; height: 200px; background: white; border: 2px solid black; display: flex; align-items: center; justify-content: center; font-family: monospace; font-size: 12px; margin: 0 auto;">QR: ${text}</div>`;
   }
 };
 
@@ -184,11 +170,12 @@ export const generateTicketHTML = (
           margin-top: 8px;
           font-weight: bold;
         }
-        .qr-image {
-          width: 120px;
-          height: 120px;
+        .qr-container {
+          text-align: center;
+          margin: 8px 0;
+          width: 200px;
+          height: 200px;
           margin: 8px auto;
-          display: block;
         }
         .total {
           border-top: 1px solid #000;
@@ -245,11 +232,13 @@ export const generateTicketHTML = (
       
       <div class="plate">${ticket.plate}</div>
       
-      <div class="qr-code">
-        <div class="qr-title">CÓDIGO QR</div>
-        <img src="${qrCodeDataURL}" alt="QR Code" class="qr-image" />
-        <div class="qr-id">ID: ${ticket.id}</div>
-      </div>
+          <div class="qr-code">
+            <div class="qr-title">CÓDIGO QR</div>
+            <div class="qr-container">
+              ${qrCodeDataURL}
+            </div>
+            <div class="qr-id">ID: ${ticket.id}</div>
+          </div>
       
       ${isExit && ticket.total ? `
       <div class="total">

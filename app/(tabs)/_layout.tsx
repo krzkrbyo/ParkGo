@@ -58,6 +58,15 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="test-print"
+        options={{
+          title: 'Pruebas',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="print" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
         name="settings"
         options={{
           title: 'Config',

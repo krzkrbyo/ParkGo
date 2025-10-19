@@ -244,6 +244,15 @@ class DatabaseClient {
     await this.addToOutbox(table, id, 'delete', JSON.stringify({ id, deleted: true }));
   }
 
+  async hardDelete(table: string, id: string): Promise<void> {
+    const db = this.getDatabase();
+    
+    await db.runAsync(`DELETE FROM ${table} WHERE id = ?`, [id]);
+    
+    // Add to outbox for sync
+    await this.addToOutbox(table, id, 'delete', JSON.stringify({ id, deleted: true }));
+  }
+
   async findById<T extends BaseModel>(table: string, id: string): Promise<T | null> {
     const db = this.getDatabase();
     const result = await db.getFirstAsync<T>(`SELECT * FROM ${table} WHERE id = ? AND deleted = 0`, [id]);
@@ -319,6 +328,16 @@ class DatabaseClient {
       await db.execAsync('ROLLBACK');
       throw error;
     }
+  }
+
+  // Specific methods for tickets
+  async deleteTicket(ticketId: string): Promise<void> {
+    await this.hardDelete('tickets', ticketId);
+  }
+
+  async deletePaymentsForTicket(ticketId: string): Promise<void> {
+    const db = this.getDatabase();
+    await db.runAsync('DELETE FROM payments WHERE ticket_id = ?', [ticketId]);
   }
 }
 

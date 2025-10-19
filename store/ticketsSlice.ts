@@ -9,6 +9,8 @@ interface TicketsState {
   payments: Payment[];
   isLoading: boolean;
   error: string | null;
+  selectedTickets: string[];
+  isSelectionMode: boolean;
 }
 
 interface TicketsActions {
@@ -26,6 +28,13 @@ interface TicketsActions {
   searchTickets: (query: string) => Ticket[];
   getTicketsByDateRange: (startDate: string, endDate: string) => Ticket[];
   clearError: () => void;
+  // Selection functionality
+  toggleSelectionMode: () => void;
+  toggleTicketSelection: (ticketId: string) => void;
+  selectAllTickets: () => void;
+  clearSelection: () => void;
+  deleteSelectedTickets: () => Promise<void>;
+  deleteTicket: (ticketId: string) => Promise<void>;
 }
 
 type TicketsStore = TicketsState & TicketsActions;
@@ -37,6 +46,8 @@ export const useTicketsStore = create<TicketsStore>((set, get) => ({
   payments: [],
   isLoading: false,
   error: null,
+  selectedTickets: [],
+  isSelectionMode: false,
 
   // Actions
   setTickets: (tickets) => set({ tickets, error: null }),
@@ -274,4 +285,76 @@ export const useTicketsStore = create<TicketsStore>((set, get) => ({
   },
 
   clearError: () => set({ error: null }),
+
+  // Selection functionality
+  toggleSelectionMode: () => set((state) => ({ 
+    isSelectionMode: !state.isSelectionMode,
+    selectedTickets: !state.isSelectionMode ? [] : state.selectedTickets
+  })),
+
+  toggleTicketSelection: (ticketId) => set((state) => {
+    const isSelected = state.selectedTickets.includes(ticketId);
+    return {
+      selectedTickets: isSelected
+        ? state.selectedTickets.filter(id => id !== ticketId)
+        : [...state.selectedTickets, ticketId]
+    };
+  }),
+
+  selectAllTickets: () => set((state) => ({
+    selectedTickets: state.tickets.map(ticket => ticket.id)
+  })),
+
+  clearSelection: () => set({ selectedTickets: [] }),
+
+  deleteSelectedTickets: async () => {
+    const { selectedTickets } = get();
+    if (selectedTickets.length === 0) return;
+
+    set({ isLoading: true, error: null });
+    try {
+      if (!db.isInitialized()) {
+        await db.init();
+      }
+
+      // Delete tickets and their payments
+      for (const ticketId of selectedTickets) {
+        await db.deleteTicket(ticketId);
+        await db.deletePaymentsForTicket(ticketId);
+      }
+
+      // Reload tickets
+      await get().loadTickets();
+      await get().loadOpenTickets();
+      
+      set({ selectedTickets: [], isSelectionMode: false });
+    } catch (error) {
+      console.error('Error deleting selected tickets:', error);
+      set({ error: error instanceof Error ? error.message : 'Error al eliminar tickets' });
+    } finally {
+      set({ isLoading: false });
+    }
+  },
+
+  deleteTicket: async (ticketId) => {
+    set({ isLoading: true, error: null });
+    try {
+      if (!db.isInitialized()) {
+        await db.init();
+      }
+
+      // Delete ticket and its payments
+      await db.deleteTicket(ticketId);
+      await db.deletePaymentsForTicket(ticketId);
+
+      // Reload tickets
+      await get().loadTickets();
+      await get().loadOpenTickets();
+    } catch (error) {
+      console.error('Error deleting ticket:', error);
+      set({ error: error instanceof Error ? error.message : 'Error al eliminar ticket' });
+    } finally {
+      set({ isLoading: false });
+    }
+  },
 }));

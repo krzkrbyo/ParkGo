@@ -21,7 +21,15 @@ export default function TicketsScreen() {
     loadOpenTickets, 
     clearError,
     searchTickets,
-    getTicketById
+    getTicketById,
+    selectedTickets,
+    isSelectionMode,
+    toggleSelectionMode,
+    toggleTicketSelection,
+    selectAllTickets,
+    clearSelection,
+    deleteSelectedTickets,
+    deleteTicket
   } = useTicketsStore();
 
   const { isInitialized, isInitializing, error: dbError } = useDatabase();
@@ -67,39 +75,94 @@ export default function TicketsScreen() {
   };
 
   const handleTicketPress = (ticketId: string) => {
-    router.push(`/tickets/${ticketId}`);
+    if (isSelectionMode) {
+      toggleTicketSelection(ticketId);
+    } else {
+      router.push(`/tickets/${ticketId}`);
+    }
+  };
+
+  const handleToggleSelection = () => {
+    toggleSelectionMode();
+  };
+
+  const handleSelectAll = () => {
+    selectAllTickets();
+  };
+
+  const handleClearSelection = () => {
+    clearSelection();
+  };
+
+  const handleDeleteSelected = async () => {
+    if (selectedTickets.length === 0) return;
+    
+    try {
+      await deleteSelectedTickets();
+    } catch (error) {
+      console.error('Error deleting tickets:', error);
+    }
+  };
+
+  const handleDeleteTicket = async (ticketId: string) => {
+    try {
+      await deleteTicket(ticketId);
+    } catch (error) {
+      console.error('Error deleting ticket:', error);
+    }
   };
 
   const handleNewTicket = () => {
     router.push('/entry/new');
   };
 
-  const renderTicket = ({ item }: { item: any }) => (
-    <AppCard 
-      style={styles.ticketCard}
-      onPress={() => handleTicketPress(item.id)}
-    >
-      <View style={styles.ticketHeader}>
-        <Text style={styles.ticketPlate}>{item.plate}</Text>
-        <StatusPill status={item.status} />
-      </View>
-      
-      <Text style={styles.ticketTime}>
-        {formatDateTime(item.entry_time)}
-      </Text>
-      
-      {item.status === 'closed' && (
-        <View style={styles.ticketFooter}>
-          <Text style={styles.ticketDuration}>
-            {formatDuration(item.duration_minutes)}
+  const renderTicket = ({ item }: { item: any }) => {
+    const isSelected = selectedTickets.includes(item.id);
+    
+    return (
+      <AppCard 
+        style={[
+          styles.ticketCard,
+          isSelectionMode && styles.ticketCardSelectable,
+          isSelected && styles.ticketCardSelected
+        ]}
+        onPress={() => handleTicketPress(item.id)}
+      >
+        {isSelectionMode && (
+          <View style={styles.selectionIndicator}>
+            <View style={[
+              styles.checkbox,
+              isSelected && styles.checkboxSelected
+            ]}>
+              {isSelected && <Text style={styles.checkmark}>✓</Text>}
+            </View>
+          </View>
+        )}
+        
+        <View style={styles.ticketContent}>
+          <View style={styles.ticketHeader}>
+            <Text style={styles.ticketPlate}>{item.plate}</Text>
+            <StatusPill status={item.status} />
+          </View>
+          
+          <Text style={styles.ticketTime}>
+            {formatDateTime(item.entry_time)}
           </Text>
-          <Text style={styles.ticketTotal}>
-            ${item.total?.toFixed(2) || '0.00'}
-          </Text>
+          
+          {item.status === 'closed' && (
+            <View style={styles.ticketFooter}>
+              <Text style={styles.ticketDuration}>
+                {formatDuration(item.duration_minutes)}
+              </Text>
+              <Text style={styles.ticketTotal}>
+                ${item.total?.toFixed(2) || '0.00'}
+              </Text>
+            </View>
+          )}
         </View>
-      )}
-    </AppCard>
-  );
+      </AppCard>
+    );
+  };
 
   if (isInitializing || (isLoading && tickets.length === 0)) {
     return (
@@ -137,13 +200,68 @@ export default function TicketsScreen() {
     <View style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.title}>Tickets</Text>
-        <AppButton
-          title="Nueva Entrada"
-          onPress={handleNewTicket}
-          size="small"
-          style={styles.newButton}
-        />
+        <View style={styles.headerActions}>
+          {isSelectionMode ? (
+            <>
+              <AppButton
+                title="Cancelar"
+                onPress={handleToggleSelection}
+                variant="outline"
+                size="small"
+                style={styles.actionButton}
+              />
+              <AppButton
+                title="Eliminar"
+                onPress={handleDeleteSelected}
+                variant="danger"
+                size="small"
+                style={styles.actionButton}
+                disabled={selectedTickets.length === 0}
+              />
+            </>
+          ) : (
+            <>
+              <AppButton
+                title="Seleccionar"
+                onPress={handleToggleSelection}
+                variant="outline"
+                size="small"
+                style={styles.actionButton}
+              />
+              <AppButton
+                title="Nueva Entrada"
+                onPress={handleNewTicket}
+                size="small"
+                style={styles.actionButton}
+              />
+            </>
+          )}
+        </View>
       </View>
+
+      {isSelectionMode && (
+        <View style={styles.selectionHeader}>
+          <Text style={styles.selectionText}>
+            {selectedTickets.length} ticket{selectedTickets.length !== 1 ? 's' : ''} seleccionado{selectedTickets.length !== 1 ? 's' : ''}
+          </Text>
+          <View style={styles.selectionActions}>
+            <AppButton
+              title="Seleccionar Todo"
+              onPress={handleSelectAll}
+              variant="outline"
+              size="small"
+              style={styles.selectionButton}
+            />
+            <AppButton
+              title="Limpiar"
+              onPress={handleClearSelection}
+              variant="outline"
+              size="small"
+              style={styles.selectionButton}
+            />
+          </View>
+        </View>
+      )}
 
       <View style={styles.searchSection}>
         <AppCard style={styles.searchCard}>
@@ -270,12 +388,73 @@ const styles = StyleSheet.create({
   newButton: {
     minWidth: 120,
   },
+  headerActions: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  actionButton: {
+    marginLeft: 4,
+  },
+  selectionHeader: {
+    backgroundColor: Colors.light.primary + '20',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  selectionText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: Colors.light.text,
+  },
+  selectionActions: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  selectionButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
   listContent: {
     padding: 20,
     paddingTop: 0,
   },
   ticketCard: {
     marginBottom: 12,
+  },
+  ticketCardSelectable: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  ticketCardSelected: {
+    borderColor: Colors.light.primary,
+    borderWidth: 2,
+    backgroundColor: Colors.light.primary + '10',
+  },
+  selectionIndicator: {
+    marginRight: 12,
+  },
+  checkbox: {
+    width: 24,
+    height: 24,
+    borderWidth: 2,
+    borderColor: Colors.light.text,
+    borderRadius: 4,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  checkboxSelected: {
+    backgroundColor: Colors.light.primary,
+    borderColor: Colors.light.primary,
+  },
+  checkmark: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  ticketContent: {
+    flex: 1,
   },
   ticketHeader: {
     flexDirection: 'row',
