@@ -3,6 +3,25 @@ import * as Sharing from 'expo-sharing';
 import { Device, RatePlan, Ticket, VehicleType } from '../types/models';
 import { formatCurrency, formatDateTime, formatDuration } from './pricing';
 
+// Simple QR code generation using a basic pattern
+const generateQRCode = (text: string): string => {
+  // This is a simplified QR-like pattern for demonstration
+  // In a real app, you'd use a proper QR code library
+  const qrSize = 8;
+  let qrPattern = '';
+  
+  for (let i = 0; i < qrSize; i++) {
+    for (let j = 0; j < qrSize; j++) {
+      // Simple pattern based on text hash
+      const charCode = text.charCodeAt((i * qrSize + j) % text.length);
+      qrPattern += (charCode % 2 === 0) ? '█' : '░';
+    }
+    qrPattern += '\n';
+  }
+  
+  return qrPattern;
+};
+
 export const generateTicketHTML = (
   ticket: Ticket,
   vehicleType: VehicleType,
@@ -80,6 +99,15 @@ export const generateTicketHTML = (
           font-size: 10px;
           margin: 8px 0;
         }
+        .qr-code {
+          text-align: center;
+          font-family: 'Courier New', monospace;
+          font-size: 8px;
+          line-height: 1;
+          margin: 8px 0;
+          padding: 8px;
+          border: 1px dashed #000;
+        }
         .total {
           border-top: 1px solid #000;
           padding-top: 8px;
@@ -135,12 +163,11 @@ export const generateTicketHTML = (
       
       <div class="plate">${ticket.plate}</div>
       
-      ${ticket.barcode ? `
-      <div class="barcode">
-        <div>Barcode: ${ticket.barcode}</div>
-        <div class="qr-placeholder">[QR Code]</div>
+      <div class="qr-code">
+        <div>QR Code:</div>
+        <pre>${generateQRCode(ticket.id)}</pre>
+        <div>ID: ${ticket.id}</div>
       </div>
-      ` : ''}
       
       ${isExit && ticket.total ? `
       <div class="total">

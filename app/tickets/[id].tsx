@@ -4,12 +4,14 @@ import { StatusPill } from '@/components/ui/StatusPill';
 import { TicketPreview } from '@/components/ui/TicketPreview';
 import { Colors } from '@/constants/theme';
 import { formatCurrency, formatDateTime, formatDuration } from '@/services/pricing';
+import { printTicket } from '@/services/print';
 import { useRatesStore } from '@/store/ratesSlice';
 import { useTicketsStore } from '@/store/ticketsSlice';
 import { useVehicleTypesStore } from '@/store/vehicleTypesSlice';
 import { router, useLocalSearchParams } from 'expo-router';
 import React, { useEffect, useState } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, ScrollView, StyleSheet, Text, View } from 'react-native';
+import QRCode from 'react-native-qrcode-svg';
 
 export default function TicketDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -49,6 +51,28 @@ export default function TicketDetailScreen() {
   const vehicleType = vehicleTypes.find(vt => vt.id === ticket.vehicle_type_id);
   const ratePlan = ratePlans.find(rp => rp.id === ticket.rate_plan_id);
 
+  const handlePrintTicket = async () => {
+    try {
+      await printTicket(ticket, vehicleType!, ratePlan!);
+      Alert.alert('Éxito', 'Ticket enviado a la impresora');
+    } catch (error) {
+      Alert.alert(
+        'Error de Impresión', 
+        'No se pudo imprimir el ticket. Puedes buscarlo en la lista de tickets y volver a intentarlo cuando la impresora esté disponible.',
+        [
+          {
+            text: 'Ver Tickets',
+            onPress: () => router.push('/tickets'),
+          },
+          {
+            text: 'OK',
+            style: 'cancel',
+          },
+        ]
+      );
+    }
+  };
+
   return (
     <ScrollView style={styles.container}>
       <View style={styles.content}>
@@ -59,6 +83,35 @@ export default function TicketDetailScreen() {
             ratePlan={ratePlan!}
             isExit={ticket.status === 'closed'}
           />
+        </AppCard>
+
+        {/* QR Code Section */}
+        <AppCard style={styles.qrCard}>
+          <Text style={styles.qrTitle}>Código QR del Ticket</Text>
+          <View style={styles.qrContainer}>
+            <QRCode
+              value={ticket.id}
+              size={200}
+              color={Colors.light.text}
+              backgroundColor={Colors.light.background}
+            />
+          </View>
+          <Text style={styles.qrDescription}>
+            Escanea este código para buscar el ticket
+          </Text>
+        </AppCard>
+
+        {/* Print Button */}
+        <AppCard style={styles.actionsCard}>
+          <AppButton
+            title="Imprimir Ticket"
+            onPress={handlePrintTicket}
+            icon="print"
+            style={styles.printButton}
+          />
+          <Text style={styles.printNote}>
+            Si la impresora no está disponible, puedes buscar este ticket en la lista de tickets y volver a imprimirlo cuando esté disponible.
+          </Text>
         </AppCard>
 
         <AppCard style={styles.detailsCard}>
@@ -186,6 +239,39 @@ const styles = StyleSheet.create({
   },
   ticketPreview: {
     padding: 16,
+  },
+  qrCard: {
+    padding: 16,
+    alignItems: 'center',
+  },
+  qrTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: Colors.light.text,
+    marginBottom: 16,
+  },
+  qrContainer: {
+    padding: 20,
+    backgroundColor: Colors.light.background,
+    borderRadius: 8,
+    marginBottom: 12,
+  },
+  qrDescription: {
+    fontSize: 14,
+    color: Colors.light.text,
+    textAlign: 'center',
+  },
+  actionsCard: {
+    padding: 16,
+  },
+  printButton: {
+    marginBottom: 12,
+  },
+  printNote: {
+    fontSize: 12,
+    color: Colors.light.text,
+    textAlign: 'center',
+    fontStyle: 'italic',
   },
   detailsCard: {
     padding: 16,

@@ -19,7 +19,7 @@ interface TicketsActions {
   loadTickets: () => Promise<void>;
   loadOpenTickets: () => Promise<void>;
   createTicket: (form: TicketForm) => Promise<string>;
-  closeTicket: (ticketId: string, exitTime: string) => Promise<void>;
+  closeTicket: (ticketId: string, exitTime: string, durationMinutes?: number, total?: number) => Promise<void>;
   processPayment: (form: PaymentForm) => Promise<void>;
   getTicketById: (id: string) => Ticket | null;
   getPaymentsForTicket: (ticketId: string) => Payment[];
@@ -133,7 +133,7 @@ export const useTicketsStore = create<TicketsStore>((set, get) => ({
     }
   },
 
-  closeTicket: async (ticketId, exitTime) => {
+  closeTicket: async (ticketId, exitTime, durationMinutes, total) => {
     set({ isLoading: true, error: null });
     
     try {
@@ -157,20 +157,35 @@ export const useTicketsStore = create<TicketsStore>((set, get) => ({
         throw new Error('Datos de tarifas no encontrados');
       }
 
-      const pricing = calculateTotal({
-        entry: ticket.entry_time,
-        exit: exitTime,
-        vehicleTypeId: ticket.vehicle_type_id,
-        plan: ratePlan,
-        rulesForType: rateItem
-      });
+      // Use provided values or calculate them
+      const finalDurationMinutes = durationMinutes ?? (() => {
+        const pricing = calculateTotal({
+          entry: ticket.entry_time,
+          exit: exitTime,
+          vehicleTypeId: ticket.vehicle_type_id,
+          plan: ratePlan,
+          rulesForType: rateItem
+        });
+        return pricing.durationMinutes;
+      })();
+
+      const finalTotal = total ?? (() => {
+        const pricing = calculateTotal({
+          entry: ticket.entry_time,
+          exit: exitTime,
+          vehicleTypeId: ticket.vehicle_type_id,
+          plan: ratePlan,
+          rulesForType: rateItem
+        });
+        return pricing.total;
+      })();
 
       // Update ticket
       await db.update('tickets', ticketId, {
         status: 'closed',
         exit_time: exitTime,
-        duration_minutes: pricing.durationMinutes,
-        total: pricing.total
+        duration_minutes: finalDurationMinutes,
+        total: finalTotal
       });
 
       // Reload tickets

@@ -1,224 +1,209 @@
 import { AppButton } from '@/components/ui/AppButton';
 import { AppCard } from '@/components/ui/AppCard';
-import { FormField } from '@/components/ui/FormField';
-import { Keypad } from '@/components/ui/Keypad';
 import { TicketPreview } from '@/components/ui/TicketPreview';
 import { Colors } from '@/constants/theme';
-import { formatCurrency } from '@/services/pricing';
-import { useDeviceStore } from '@/store/deviceSlice';
+import { formatCurrency, formatDateTime, formatDuration } from '@/services/pricing';
 import { useRatesStore } from '@/store/ratesSlice';
 import { useTicketsStore } from '@/store/ticketsSlice';
 import { useVehicleTypesStore } from '@/store/vehicleTypesSlice';
-import React, { useState } from 'react';
+import { router, useLocalSearchParams } from 'expo-router';
+import React, { useEffect, useState } from 'react';
 import { Alert, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 export default function ChargeExitScreen() {
-  const { openTickets, closeTicket, processPayment } = useTicketsStore();
+  const { getTicketById, closeTicket, processPayment } = useTicketsStore();
   const { vehicleTypes } = useVehicleTypesStore();
   const { activeRatePlan, getRateItemForVehicleType } = useRatesStore();
-  const { device } = useDeviceStore();
   
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedTicket, setSelectedTicket] = useState<any>(null);
-  const [paymentAmount, setPaymentAmount] = useState('');
+  const { ticketId } = useLocalSearchParams<{ ticketId: string }>();
+  const [ticket, setTicket] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [showPayment, setShowPayment] = useState(false);
 
-  const filteredTickets = openTickets.filter(ticket =>
-    ticket.plate.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    ticket.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    (ticket.barcode && ticket.barcode.toLowerCase().includes(searchQuery.toLowerCase()))
-  );
+  useEffect(() => {
+    if (ticketId) {
+      const ticketData = getTicketById(ticketId);
+      if (ticketData) {
+        setTicket(ticketData);
+      }
+    }
+  }, [ticketId]);
 
-  const handleSelectTicket = (ticket: any) => {
-    setSelectedTicket(ticket);
-    setPaymentAmount('');
+  const calculateTotal = () => {
+    if (!ticket || !activeRatePlan) return 0;
+    
+    const rateItem = getRateItemForVehicleType(activeRatePlan.id, ticket.vehicle_type_id);
+    if (!rateItem) return 0;
+
+    const entryTime = new Date(ticket.entry_time);
+    const exitTime = new Date();
+    const durationMinutes = Math.floor((exitTime.getTime() - entryTime.getTime()) / (1000 * 60));
+    
+    const baseMinutes = rateItem.base_minutes;
+    const basePrice = rateItem.base_price;
+    const addMinutes = rateItem.add_minutes;
+    const addPrice = rateItem.add_price;
+    const dailyMax = activeRatePlan.daily_max;
+    
+    let total = basePrice;
+    
+    if (durationMinutes > baseMinutes) {
+      const additionalMinutes = durationMinutes - baseMinutes;
+      const additionalBlocks = Math.ceil(additionalMinutes / addMinutes);
+      total += additionalBlocks * addPrice;
+    }
+    
+    if (dailyMax && total > dailyMax) {
+      total = dailyMax;
+    }
+    
+    return total;
   };
 
-  const handleCloseTicket = async () => {
-    if (!selectedTicket) return;
-
-    setIsLoading(true);
-    try {
-      await closeTicket(selectedTicket.id, new Date().toISOString());
-      setSelectedTicket(null);
-      setSearchQuery('');
-      Alert.alert('¡Ticket Cerrado!', 'El ticket ha sido cerrado exitosamente');
-    } catch (error) {
-      Alert.alert('Error', error instanceof Error ? error.message : 'Error al cerrar el ticket');
-    } finally {
-      setIsLoading(false);
-    }
+  const handleConfirmExit = () => {
+    Alert.alert(
+      'Confirmar Salida',
+      '¿Estás seguro de que deseas procesar la salida de este vehículo?',
+      [
+        {
+          text: 'Cancelar',
+          style: 'cancel',
+        },
+        {
+          text: 'Confirmar',
+          onPress: () => setShowPayment(true),
+        },
+      ]
+    );
   };
 
   const handleProcessPayment = async () => {
-    if (!selectedTicket || !paymentAmount) return;
+    if (!ticket) return;
 
-    const amount = parseFloat(paymentAmount);
-    if (isNaN(amount) || amount < (selectedTicket.total || 0)) {
-      Alert.alert('Error', 'El monto debe ser mayor o igual al total del ticket');
-      return;
-    }
-
+    const total = calculateTotal();
+    
     setIsLoading(true);
     try {
+      // Close ticket
+      await closeTicket(ticket.id, new Date().toISOString(), durationMinutes, total);
+
+      // Process payment (cash only for now)
       await processPayment({
-        ticket_id: selectedTicket.id,
+        ticket_id: ticket.id,
         method: 'cash',
-        amount: amount,
-        change: amount - (selectedTicket.total || 0),
+        amount: total,
+        change: 0,
       });
 
       Alert.alert(
-        '¡Pago Procesado!',
-        `Cambio: ${formatCurrency(amount - (selectedTicket.total || 0))}`,
+        '¡Salida Procesada!',
+        `Total cobrado: ${formatCurrency(total)}`,
         [
           {
-            text: 'Imprimir',
+            text: 'Imprimir Ticket',
             onPress: () => {
               // TODO: Implement print functionality
-              setSelectedTicket(null);
-              setSearchQuery('');
+              router.back();
             },
           },
           {
             text: 'OK',
-            onPress: () => {
-              setSelectedTicket(null);
-              setSearchQuery('');
-            },
+            onPress: () => router.back(),
           },
         ]
       );
     } catch (error) {
-      Alert.alert('Error', error instanceof Error ? error.message : 'Error al procesar el pago');
+      Alert.alert('Error', error instanceof Error ? error.message : 'Error al procesar la salida');
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleKeyPress = (key: string) => {
-    if (key === 'C') {
-      setPaymentAmount('');
-    } else if (key === '⌫') {
-      setPaymentAmount(prev => prev.slice(0, -1));
-    } else {
-      setPaymentAmount(prev => prev + key);
-    }
-  };
+  if (!ticket) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.errorContainer}>
+          <Text style={styles.errorText}>Ticket no encontrado</Text>
+          <AppButton
+            title="Volver"
+            onPress={() => router.back()}
+            style={styles.button}
+          />
+        </View>
+      </View>
+    );
+  }
 
-  const getVehicleType = (ticket: any) => {
-    return vehicleTypes.find(vt => vt.id === ticket.vehicle_type_id);
-  };
-
-  const getRateItem = (ticket: any) => {
-    if (!activeRatePlan) return null;
-    return getRateItemForVehicleType(activeRatePlan.id, ticket.vehicle_type_id);
-  };
+  const vehicleType = vehicleTypes.find(vt => vt.id === ticket.vehicle_type_id);
+  const total = calculateTotal();
+  const entryTime = new Date(ticket.entry_time);
+  const exitTime = new Date();
+  const durationMinutes = Math.floor((exitTime.getTime() - entryTime.getTime()) / (1000 * 60));
 
   return (
     <ScrollView style={styles.container}>
       <View style={styles.content}>
-        <AppCard style={styles.card}>
-          <Text style={styles.title}>Cobrar Salida</Text>
-          <Text style={styles.subtitle}>
-            Busca y procesa el pago de un ticket
-          </Text>
-
-          <FormField
-            label="Buscar Ticket"
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-            placeholder="Placa, ID o código de barras"
-            autoCapitalize="characters"
+        <AppCard style={styles.ticketPreview}>
+          <TicketPreview
+            ticket={ticket}
+            vehicleType={vehicleType!}
+            ratePlan={activeRatePlan!}
+            isExit={showPayment}
           />
-
-          {filteredTickets.length > 0 && (
-            <View style={styles.ticketsList}>
-              {filteredTickets.map((ticket) => {
-                const vehicleType = getVehicleType(ticket);
-                const rateItem = getRateItem(ticket);
-                
-                return (
-                  <AppCard
-                    key={ticket.id}
-                    style={[
-                      styles.ticketCard,
-                      selectedTicket?.id === ticket.id && styles.selectedTicketCard
-                    ]}
-                    onPress={() => handleSelectTicket(ticket)}
-                  >
-                    <View style={styles.ticketHeader}>
-                      <Text style={styles.ticketId}>#{ticket.id.substring(0, 8)}</Text>
-                      <Text style={styles.ticketPlate}>{ticket.plate}</Text>
-                    </View>
-                    <View style={styles.ticketInfo}>
-                      <Text style={styles.ticketType}>{vehicleType?.name}</Text>
-                      <Text style={styles.ticketTime}>
-                        Entrada: {new Date(ticket.entry_time).toLocaleString()}
-                      </Text>
-                      {ticket.barcode && (
-                        <Text style={styles.ticketBarcode}>Barcode: {ticket.barcode}</Text>
-                      )}
-                    </View>
-                  </AppCard>
-                );
-              })}
-            </View>
-          )}
-
-          {filteredTickets.length === 0 && searchQuery && (
-            <View style={styles.noResults}>
-              <Text style={styles.noResultsText}>No se encontraron tickets</Text>
-            </View>
-          )}
         </AppCard>
 
-        {selectedTicket && (
+        {!showPayment ? (
+          <AppCard style={styles.confirmCard}>
+            <Text style={styles.sectionTitle}>Confirmar Salida</Text>
+            <Text style={styles.confirmText}>
+              ¿Deseas procesar la salida de este vehículo?
+            </Text>
+            <AppButton
+              title="Confirmar Salida"
+              onPress={handleConfirmExit}
+              style={styles.confirmButton}
+            />
+          </AppCard>
+        ) : (
           <AppCard style={styles.paymentCard}>
-            <Text style={styles.paymentTitle}>Procesar Pago</Text>
+            <Text style={styles.sectionTitle}>Resumen de Cobro</Text>
             
-            <View style={styles.ticketPreview}>
-              <TicketPreview
-                ticket={selectedTicket}
-                vehicleType={getVehicleType(selectedTicket)!}
-                ratePlan={activeRatePlan!}
-                isExit={true}
-              />
+            <View style={styles.detailRow}>
+              <Text style={styles.detailLabel}>Placa:</Text>
+              <Text style={styles.detailValue}>{ticket.plate}</Text>
             </View>
-
-            <View style={styles.paymentSection}>
-              <Text style={styles.paymentLabel}>Monto a Pagar</Text>
-              <Text style={styles.paymentAmount}>
-                {formatCurrency(selectedTicket.total || 0)}
-              </Text>
+            
+            <View style={styles.detailRow}>
+              <Text style={styles.detailLabel}>Tipo:</Text>
+              <Text style={styles.detailValue}>{vehicleType?.name}</Text>
             </View>
-
-            <View style={styles.keypadSection}>
-              <Keypad
-                onPress={handleKeyPress}
-                onDelete={() => setPaymentAmount(prev => prev.slice(0, -1))}
-                onClear={() => setPaymentAmount('')}
-                showEnter={false}
-              />
+            
+            <View style={styles.detailRow}>
+              <Text style={styles.detailLabel}>Entrada:</Text>
+              <Text style={styles.detailValue}>{formatDateTime(entryTime)}</Text>
             </View>
-
-            <View style={styles.paymentActions}>
-              <AppButton
-                title="Cerrar Sin Pago"
-                onPress={handleCloseTicket}
-                variant="outline"
-                loading={isLoading}
-                style={styles.actionButton}
-              />
-              
-              <AppButton
-                title="Procesar Pago"
-                onPress={handleProcessPayment}
-                loading={isLoading}
-                disabled={!paymentAmount || parseFloat(paymentAmount) < (selectedTicket.total || 0)}
-                style={styles.actionButton}
-              />
+            
+            <View style={styles.detailRow}>
+              <Text style={styles.detailLabel}>Salida:</Text>
+              <Text style={styles.detailValue}>{formatDateTime(exitTime)}</Text>
             </View>
+            
+            <View style={styles.detailRow}>
+              <Text style={styles.detailLabel}>Duración:</Text>
+              <Text style={styles.detailValue}>{formatDuration(durationMinutes)}</Text>
+            </View>
+            
+            <View style={styles.totalRow}>
+              <Text style={styles.totalLabel}>Total a Cobrar:</Text>
+              <Text style={styles.totalValue}>{formatCurrency(total)}</Text>
+            </View>
+            
+            <AppButton
+              title="Procesar Pago"
+              onPress={handleProcessPayment}
+              loading={isLoading}
+              style={styles.paymentButton}
+            />
           </AppCard>
         )}
       </View>
@@ -233,114 +218,84 @@ const styles = StyleSheet.create({
   },
   content: {
     padding: 24,
+    gap: 16,
   },
-  card: {
-    marginBottom: 16,
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 48,
   },
-  title: {
-    fontSize: 24,
-    fontWeight: 'bold',
+  errorText: {
+    fontSize: 18,
     color: Colors.light.text,
-    textAlign: 'center',
-    marginBottom: 8,
-  },
-  subtitle: {
-    fontSize: 14,
-    color: Colors.light.text,
-    textAlign: 'center',
     marginBottom: 24,
-    opacity: 0.7,
   },
-  ticketsList: {
-    marginTop: 16,
-    gap: 8,
+  button: {
+    minWidth: 200,
   },
-  ticketCard: {
-    padding: 12,
+  ticketPreview: {
+    padding: 16,
   },
-  selectedTicketCard: {
-    borderColor: Colors.light.primary,
-    borderWidth: 2,
-  },
-  ticketHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  ticketId: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: Colors.light.text,
-  },
-  ticketPlate: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: Colors.light.primary,
-  },
-  ticketInfo: {
-    gap: 4,
-  },
-  ticketType: {
-    fontSize: 12,
-    color: Colors.light.text,
-  },
-  ticketTime: {
-    fontSize: 12,
-    color: Colors.light.text,
-    opacity: 0.7,
-  },
-  ticketBarcode: {
-    fontSize: 12,
-    color: Colors.light.text,
-    opacity: 0.7,
-  },
-  noResults: {
-    padding: 24,
+  confirmCard: {
+    padding: 16,
     alignItems: 'center',
   },
-  noResultsText: {
-    fontSize: 14,
-    color: Colors.light.text,
-    opacity: 0.7,
-  },
-  paymentCard: {
-    marginBottom: 16,
-  },
-  paymentTitle: {
+  sectionTitle: {
     fontSize: 18,
     fontWeight: 'bold',
     color: Colors.light.text,
     marginBottom: 16,
   },
-  ticketPreview: {
-    marginBottom: 16,
-  },
-  paymentSection: {
-    alignItems: 'center',
-    marginBottom: 16,
-    paddingVertical: 12,
-    backgroundColor: '#F3F4F6',
-    borderRadius: 8,
-  },
-  paymentLabel: {
-    fontSize: 14,
+  confirmText: {
+    fontSize: 16,
     color: Colors.light.text,
-    marginBottom: 4,
+    textAlign: 'center',
+    marginBottom: 24,
   },
-  paymentAmount: {
-    fontSize: 24,
+  confirmButton: {
+    minWidth: 200,
+  },
+  paymentCard: {
+    padding: 16,
+  },
+  detailRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E0E0E0',
+  },
+  detailLabel: {
+    fontSize: 16,
+    color: Colors.light.text,
+    fontWeight: '500',
+  },
+  detailValue: {
+    fontSize: 16,
+    color: Colors.light.text,
+  },
+  totalRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 16,
+    marginTop: 8,
+    borderTopWidth: 2,
+    borderTopColor: Colors.light.primary,
+  },
+  totalLabel: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: Colors.light.text,
+  },
+  totalValue: {
+    fontSize: 20,
     fontWeight: 'bold',
     color: Colors.light.primary,
   },
-  keypadSection: {
-    marginBottom: 16,
-  },
-  paymentActions: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  actionButton: {
-    flex: 1,
+  paymentButton: {
+    marginTop: 16,
   },
 });

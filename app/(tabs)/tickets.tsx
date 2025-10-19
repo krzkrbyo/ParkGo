@@ -1,13 +1,14 @@
 import { AppButton } from '@/components/ui/AppButton';
 import { AppCard } from '@/components/ui/AppCard';
 import { EmptyState } from '@/components/ui/EmptyState';
+import { FormField } from '@/components/ui/FormField';
 import { StatusPill } from '@/components/ui/StatusPill';
 import { Colors } from '@/constants/theme';
 import { useDatabase } from '@/hooks/useDatabase';
 import { formatDateTime, formatDuration } from '@/services/pricing';
 import { useTicketsStore } from '@/store/ticketsSlice';
 import { router } from 'expo-router';
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, FlatList, RefreshControl, StyleSheet, Text, View } from 'react-native';
 
 export default function TicketsScreen() {
@@ -18,10 +19,14 @@ export default function TicketsScreen() {
     error, 
     loadTickets, 
     loadOpenTickets, 
-    clearError 
+    clearError,
+    searchTickets,
+    getTicketById
   } = useTicketsStore();
 
   const { isInitialized, isInitializing, error: dbError } = useDatabase();
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filteredTickets, setFilteredTickets] = useState<any[]>([]);
 
   useEffect(() => {
     if (isInitialized) {
@@ -29,6 +34,32 @@ export default function TicketsScreen() {
       loadOpenTickets();
     }
   }, [isInitialized]);
+
+  useEffect(() => {
+    if (searchQuery.trim()) {
+      const results = searchTickets(searchQuery);
+      setFilteredTickets(results);
+    } else {
+      setFilteredTickets([]);
+    }
+  }, [searchQuery, tickets, openTickets]);
+
+  const handleSearch = () => {
+    if (!searchQuery.trim()) return;
+    
+    const results = searchTickets(searchQuery);
+    if (results.length === 0) {
+      // Try to find by exact ID
+      const exactTicket = getTicketById(searchQuery.trim());
+      if (exactTicket) {
+        setFilteredTickets([exactTicket]);
+      } else {
+        setFilteredTickets([]);
+      }
+    } else {
+      setFilteredTickets(results);
+    }
+  };
 
   const handleRefresh = () => {
     loadTickets();
@@ -96,6 +127,11 @@ export default function TicketsScreen() {
   }
 
   const allTickets = [...openTickets, ...tickets];
+  const sortedTickets = allTickets.sort((a, b) => 
+    new Date(b.entry_time).getTime() - new Date(a.entry_time).getTime()
+  );
+
+  const displayTickets = filteredTickets.length > 0 ? filteredTickets : sortedTickets;
 
   return (
     <View style={styles.container}>
@@ -109,19 +145,45 @@ export default function TicketsScreen() {
         />
       </View>
 
-      {allTickets.length === 0 ? (
+      <View style={styles.searchSection}>
+        <AppCard style={styles.searchCard}>
+          <FormField
+            label="Buscar Ticket"
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            placeholder="ID del ticket, placa o barcode"
+            returnKeyType="search"
+            onSubmitEditing={handleSearch}
+            rightIcon={
+              <Text style={styles.searchIcon}>🔍</Text>
+            }
+            onRightIconPress={handleSearch}
+          />
+          {searchQuery.trim() && (
+            <AppButton
+              title="Limpiar"
+              onPress={() => setSearchQuery('')}
+              variant="outline"
+              size="small"
+              style={styles.clearButton}
+            />
+          )}
+        </AppCard>
+      </View>
+
+      {displayTickets.length === 0 ? (
         <EmptyState
           icon="receipt-outline"
-          title="No hay tickets"
-          description="Crea tu primer ticket de estacionamiento"
-          action={{
+          title={searchQuery.trim() ? "No se encontraron tickets" : "No hay tickets"}
+          description={searchQuery.trim() ? "Intenta con otro término de búsqueda" : "Crea tu primer ticket de estacionamiento"}
+          action={searchQuery.trim() ? undefined : {
             title: "Nueva Entrada",
             onPress: handleNewTicket,
           }}
         />
       ) : (
         <FlatList
-          data={allTickets}
+          data={displayTickets}
           keyExtractor={(item) => item.id}
           renderItem={renderTicket}
           refreshControl={
@@ -184,6 +246,21 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 60,
     paddingBottom: 20,
+  },
+  searchSection: {
+    paddingHorizontal: 20,
+    marginBottom: 16,
+  },
+  searchCard: {
+    padding: 16,
+  },
+  searchIcon: {
+    fontSize: 16,
+    color: Colors.light.primary,
+  },
+  clearButton: {
+    marginTop: 8,
+    alignSelf: 'flex-end',
   },
   title: {
     fontSize: 32,

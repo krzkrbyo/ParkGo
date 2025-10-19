@@ -1,11 +1,12 @@
 import { AppButton } from '@/components/ui/AppButton';
 import { AppCard } from '@/components/ui/AppCard';
+import { FormField } from '@/components/ui/FormField';
 import { Colors } from '@/constants/theme';
 import { useDatabase } from '@/hooks/useDatabase';
 import { useTicketsStore } from '@/store/ticketsSlice';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, FlatList, RefreshControl, StyleSheet, Text, View } from 'react-native';
 
 export default function ExitScreen() {
@@ -14,16 +15,31 @@ export default function ExitScreen() {
     isLoading, 
     error, 
     loadOpenTickets, 
-    clearError 
+    clearError,
+    getTicketById,
+    searchTickets
   } = useTicketsStore();
 
   const { isInitialized, isInitializing, error: dbError } = useDatabase();
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filteredTickets, setFilteredTickets] = useState<any[]>([]);
 
   useEffect(() => {
     if (isInitialized) {
       loadOpenTickets();
     }
   }, [isInitialized]);
+
+  useEffect(() => {
+    if (searchQuery.trim()) {
+      const results = searchTickets(searchQuery);
+      // Filter only open tickets
+      const openResults = results.filter(ticket => ticket.status === 'open');
+      setFilteredTickets(openResults);
+    } else {
+      setFilteredTickets([]);
+    }
+  }, [searchQuery, openTickets]);
 
   const handleRefresh = () => {
     loadOpenTickets();
@@ -33,8 +49,24 @@ export default function ExitScreen() {
     router.push(`/exit/charge?ticketId=${ticketId}`);
   };
 
-  const handleScanBarcode = () => {
-    router.push('/scan');
+
+  const handleSearch = () => {
+    if (!searchQuery.trim()) return;
+    
+    const results = searchTickets(searchQuery);
+    const openResults = results.filter(ticket => ticket.status === 'open');
+    
+    if (openResults.length === 0) {
+      // Try to find by exact ID
+      const exactTicket = getTicketById(searchQuery.trim());
+      if (exactTicket && exactTicket.status === 'open') {
+        setFilteredTickets([exactTicket]);
+      } else {
+        setFilteredTickets([]);
+      }
+    } else {
+      setFilteredTickets(openResults);
+    }
   };
 
   const renderOpenTicket = ({ item }: { item: any }) => (
@@ -94,51 +126,76 @@ export default function ExitScreen() {
         <Text style={styles.subtitle}>Tickets abiertos: {openTickets.length}</Text>
       </View>
 
-      <View style={styles.scanSection}>
-        <AppCard style={styles.scanCard}>
-          <View style={styles.iconContainer}>
-            <Ionicons name="qr-code" size={32} color={Colors.light.primary} />
-          </View>
-          
-          <Text style={styles.scanTitle}>Escanear Ticket</Text>
-          <Text style={styles.scanDescription}>
-            Escanea el código de barras del ticket
-          </Text>
-          
-          <AppButton
-            title="Escanear"
-            onPress={handleScanBarcode}
-            variant="outline"
-            size="small"
-            style={styles.scanButton}
+      <View style={styles.searchSection}>
+        <AppCard style={styles.searchCard}>
+          <FormField
+            label="Buscar Ticket"
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            placeholder="ID del ticket, placa o barcode"
+            returnKeyType="search"
+            onSubmitEditing={handleSearch}
+            rightIcon={
+              <Text style={styles.searchIcon}>🔍</Text>
+            }
+            onRightIconPress={handleSearch}
           />
+          {searchQuery.trim() && (
+            <AppButton
+              title="Limpiar"
+              onPress={() => setSearchQuery('')}
+              variant="outline"
+              size="small"
+              style={styles.clearButton}
+            />
+          )}
         </AppCard>
       </View>
 
-      {openTickets.length === 0 ? (
-        <View style={styles.emptyContainer}>
-          <Ionicons name="checkmark-circle" size={64} color={Colors.light.primary} />
-          <Text style={styles.emptyTitle}>No hay tickets abiertos</Text>
-          <Text style={styles.emptyDescription}>
-            Todos los vehículos han salido del estacionamiento
-          </Text>
-        </View>
-      ) : (
-        <FlatList
-          data={openTickets}
-          keyExtractor={(item) => item.id}
-          renderItem={renderOpenTicket}
-          refreshControl={
-            <RefreshControl
-              refreshing={isLoading}
-              onRefresh={handleRefresh}
-              colors={[Colors.light.primary]}
-            />
-          }
-          contentContainerStyle={styles.listContent}
-          showsVerticalScrollIndicator={false}
-        />
-      )}
+      {(() => {
+        const displayTickets = filteredTickets.length > 0 ? filteredTickets : openTickets;
+        
+        if (openTickets.length === 0) {
+          return (
+            <View style={styles.emptyContainer}>
+              <Ionicons name="checkmark-circle" size={64} color={Colors.light.primary} />
+              <Text style={styles.emptyTitle}>No hay tickets abiertos</Text>
+              <Text style={styles.emptyDescription}>
+                Todos los vehículos han salido del estacionamiento
+              </Text>
+            </View>
+          );
+        }
+        
+        if (filteredTickets.length === 0 && searchQuery.trim()) {
+          return (
+            <View style={styles.emptyContainer}>
+              <Ionicons name="search" size={64} color={Colors.light.text} />
+              <Text style={styles.emptyTitle}>No se encontraron tickets</Text>
+              <Text style={styles.emptyDescription}>
+                Intenta con otro término de búsqueda
+              </Text>
+            </View>
+          );
+        }
+        
+        return (
+          <FlatList
+            data={displayTickets}
+            keyExtractor={(item) => item.id}
+            renderItem={renderOpenTicket}
+            refreshControl={
+              <RefreshControl
+                refreshing={isLoading}
+                onRefresh={handleRefresh}
+                colors={[Colors.light.primary]}
+              />
+            }
+            contentContainerStyle={styles.listContent}
+            showsVerticalScrollIndicator={false}
+          />
+        );
+      })()}
     </View>
   );
 }
@@ -196,30 +253,20 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: Colors.light.text,
   },
-  scanSection: {
+  searchSection: {
     paddingHorizontal: 20,
-    marginBottom: 20,
-  },
-  scanCard: {
-    alignItems: 'center',
-  },
-  iconContainer: {
-    marginBottom: 12,
-  },
-  scanTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: Colors.light.text,
-    marginBottom: 4,
-  },
-  scanDescription: {
-    fontSize: 14,
-    color: Colors.light.text,
-    textAlign: 'center',
     marginBottom: 16,
   },
-  scanButton: {
-    minWidth: 120,
+  searchCard: {
+    padding: 16,
+  },
+  searchIcon: {
+    fontSize: 16,
+    color: Colors.light.primary,
+  },
+  clearButton: {
+    marginTop: 8,
+    alignSelf: 'flex-end',
   },
   listContent: {
     padding: 20,

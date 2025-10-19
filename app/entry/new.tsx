@@ -17,7 +17,6 @@ export default function NewEntryScreen() {
   
   const [selectedVehicleType, setSelectedVehicleType] = useState('');
   const [plate, setPlate] = useState('');
-  const [barcode, setBarcode] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
@@ -40,26 +39,10 @@ export default function NewEntryScreen() {
       const ticketId = await createTicket({
         vehicle_type_id: selectedVehicleType,
         plate: plate.trim().toUpperCase(),
-        barcode: barcode.trim() || undefined,
       });
 
-      Alert.alert(
-        '¡Ticket Creado!',
-        `Ticket #${ticketId.substring(0, 8)} creado exitosamente`,
-        [
-          {
-            text: 'Imprimir',
-            onPress: () => {
-              // TODO: Implement print functionality
-              router.back();
-            },
-          },
-          {
-            text: 'OK',
-            onPress: () => router.back(),
-          },
-        ]
-      );
+      // Navegar directamente a la vista del ticket
+      router.push(`/tickets/${ticketId}`);
     } catch (error) {
       Alert.alert('Error', error instanceof Error ? error.message : 'Error al crear el ticket');
     } finally {
@@ -67,9 +50,6 @@ export default function NewEntryScreen() {
     }
   };
 
-  const handleScanBarcode = () => {
-    router.push('/scan');
-  };
 
   return (
     <ScrollView style={styles.container}>
@@ -110,16 +90,6 @@ export default function NewEntryScreen() {
               required
             />
 
-            <FormField
-              label="Código de Barras (Opcional)"
-              value={barcode}
-              onChangeText={setBarcode}
-              placeholder="Escanear o ingresar manualmente"
-              rightIcon={
-                <Text style={styles.scanButton}>📷</Text>
-              }
-              onRightIconPress={handleScanBarcode}
-            />
 
             <AppButton
               title="Crear Ticket"
@@ -136,9 +106,6 @@ export default function NewEntryScreen() {
             <Text style={styles.infoTitle}>Información del Dispositivo</Text>
             <Text style={styles.infoText}>
               <Text style={styles.infoLabel}>Ubicación:</Text> {device.location_name}
-            </Text>
-            <Text style={styles.infoText}>
-              <Text style={styles.infoLabel}>Modo de Escaneo:</Text> {device.scanner_mode}
             </Text>
           </AppCard>
         )}
@@ -192,9 +159,6 @@ const styles = StyleSheet.create({
   },
   picker: {
     height: 44,
-  },
-  scanButton: {
-    fontSize: 20,
   },
   button: {
     marginTop: 16,
