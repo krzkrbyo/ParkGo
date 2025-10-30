@@ -156,9 +156,10 @@ const styles = StyleSheet.create({
     borderColor: '#D1D5DB',
     borderRadius: 8,
     backgroundColor: '#FFFFFF',
+    overflow: 'hidden',
   },
   picker: {
-    height: 44,
+    height: 50,
   },
   button: {
     marginTop: 16,

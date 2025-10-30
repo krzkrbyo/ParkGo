@@ -2,6 +2,13 @@
 
 Sistema de gestión de estacionamiento desarrollado con React Native, Expo Router y TypeScript. Compatible con Expo Go para desarrollo y testing.
 
+<a href="Documentación/" title="Ir a Documentación">
+  <img src="Documentación/diagrama_Infraestructura.png" alt="Diagrama de Infraestructura ParkGo" width="900" />
+  <br/>
+  <sub>Ver documentación completa</sub>
+  
+</a>
+
 ## 🚀 Características
 
 - **Autenticación OTP por email** con Supabase
@@ -369,6 +376,10 @@ expo build:ios
 3. **Configurar impresoras** térmicas
 4. **Probar sincronización** en red real
 
+## 📚 Documentación
+
+- Accede al directorio de documentación en `Documentación/` para guías, decisiones técnicas y troubleshooting.
+
 ## 🐛 Troubleshooting
 
 ### Problemas Comunes
@@ -409,7 +420,7 @@ Este proyecto está bajo la Licencia MIT. Ver `LICENSE` para más detalles.
 ## 📞 Soporte
 
 - **Issues**: GitHub Issues
-- **Documentación**: README.md
+- **Documentación**: `Documentación/`
 - **Email**: soporte@parkgo.com
 
 ---
