@@ -14,7 +14,7 @@ Sistema de gestión de estacionamiento desarrollado con React Native, Expo Route
 ### Video 1: Prompt utilizado para crear ParkGo
 
 <a href="https://www.youtube.com/watch?v=QQy3W9XFA6E&t=71s" target="_blank">
-  <img src="https://img.youtube.com/vi/QQy3W9XFA6E/maxresdefault.jpg" alt="Prompt utilizado para crear ParkGo" width="600" />
+  <img src="https://img.youtube.com/vi/QQy3W9XFA6E/hqdefault.jpg" alt="Prompt utilizado para crear ParkGo" width="600" />
 </a>
 
 **Enlace directo:** [Ver en YouTube](https://www.youtube.com/watch?v=QQy3W9XFA6E&t=71s)
