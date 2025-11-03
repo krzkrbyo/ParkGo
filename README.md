@@ -9,6 +9,28 @@ Sistema de gestión de estacionamiento desarrollado con React Native, Expo Route
   
 </a>
 
+## 📹 Videos
+
+### Video 1: Prompt utilizado para crear ParkGo
+
+<a href="https://www.youtube.com/watch?v=QQy3W9XFA6E&t=71s" target="_blank">
+  <img src="https://img.youtube.com/vi/QQy3W9XFA6E/maxresdefault.jpg" alt="Prompt utilizado para crear ParkGo" width="600" />
+</a>
+
+**Enlace directo:** [Ver en YouTube](https://www.youtube.com/watch?v=QQy3W9XFA6E&t=71s)
+
+---
+
+### Video 2: MVP de ParkGo
+
+<a href="https://www.youtube.com/watch?v=LAeGoit5DFw" target="_blank">
+  <img src="https://img.youtube.com/vi/LAeGoit5DFw/maxresdefault.jpg" alt="MVP de ParkGo" width="600" />
+</a>
+
+**Enlace directo:** [Ver en YouTube](https://www.youtube.com/watch?v=LAeGoit5DFw)
+
+---
+
 ## 🚀 Características
 
 - **Autenticación OTP por email** con Supabase
